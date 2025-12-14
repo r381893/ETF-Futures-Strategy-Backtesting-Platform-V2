@@ -477,6 +477,32 @@ with tab2:
             with cols[col_idx]:
                 if st.checkbox(f"**{result.get('name', '未命名')}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
                     selected_keys.append(key)
+                
+                # 策略說明小字
+                strategy_desc = {
+                    'always_long': '永遠持有期貨多單',
+                    'ma_long': '價格>MA做多，<MA平倉',
+                    'ma_trend': '價格>MA做多，<MA做空',
+                    'etf_only': '不做期貨，純持有ETF'
+                }
+                alloc_desc = {
+                    'dynamic': '期貨優先，剩餘買ETF',
+                    'fixed': '固定比例配置',
+                    'futures_only': '純期貨不買ETF'
+                }
+                strat = result.get('strategy', '')
+                alloc = result.get('allocation_mode', 'dynamic')
+                etf = result.get('etf', 'none')
+                
+                desc_parts = []
+                if strat in strategy_desc:
+                    desc_parts.append(strategy_desc[strat])
+                if etf != 'none' and strat != 'etf_only':
+                    desc_parts.append(f"搭配{etf}")
+                if strat != 'etf_only' and alloc in alloc_desc:
+                    desc_parts.append(alloc_desc[alloc])
+                
+                st.caption(" | ".join(desc_parts) if desc_parts else "")
         
         st.markdown("---")
         
