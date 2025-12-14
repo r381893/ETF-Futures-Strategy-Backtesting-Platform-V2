@@ -525,6 +525,15 @@ with tab2:
                 if strat != 'etf_only' and alloc in alloc_desc:
                     desc_parts.append(alloc_desc[alloc])
                 
+                # 加入回測區間
+                start_d = result.get('start_date', '')
+                end_d = result.get('end_date', '')
+                if start_d and end_d:
+                    # 簡化日期顯示
+                    start_short = start_d[:7] if len(start_d) >= 7 else start_d  # 2014-10
+                    end_short = end_d[:7] if len(end_d) >= 7 else end_d
+                    desc_parts.append(f"📅 {start_short} ~ {end_short}")
+                
                 st.caption(" | ".join(desc_parts) if desc_parts else "")
         
         st.markdown("---")
@@ -723,12 +732,97 @@ with tab2:
                 yaxis_title="百分比 (%)", legend=dict(orientation="h", y=1.1)
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # ===== 年度報酬率比較表格 =====
+            st.markdown("---")
+            st.markdown("#### 📅 年度報酬率比較")
+            
+            if st.button("📊 載入年度報酬率", type="primary"):
+                with st.spinner("正在計算各策略年度報酬..."):
+                    yearly_returns = {}
+                    all_years = set()
+                    
+                    for key in selected_keys:
+                        r = saved[key]
+                        
+                        # 重新執行回測
+                        start_date = r.get('start_date', '2014-10-01')
+                        end_date = r.get('end_date', str(df_raw.index.max().date()))
+                        
+                        mask = (df_raw.index >= pd.Timestamp(start_date)) & (df_raw.index <= pd.Timestamp(end_date))
+                        df_backtest = df_raw.loc[mask].copy()
+                        
+                        etf_dividends = ETF_CONFIG.get(r.get('etf', 'none'), {}).get('dividends', {})
+                        
+                        df_result, _, _ = run_backtest(
+                            df_data=df_backtest,
+                            strategy=r.get('strategy', 'ma_long'),
+                            etf_code=r.get('etf', 'none'),
+                            etf_dividends=etf_dividends,
+                            initial_capital=r.get('initial_capital', 1000000),
+                            leverage=r.get('leverage', 2.0),
+                            ma_period=r.get('ma_period', 13),
+                            risk_ratio=3.0,
+                            dividend_yield=0.04,
+                            allocation_mode=r.get('allocation_mode', 'dynamic'),
+                            futures_pct=r.get('futures_pct', 0.6),
+                            etf_pct=r.get('etf_pct', 0.4)
+                        )
+                        
+                        # 計算年度報酬
+                        df_result['Year'] = df_result.index.year
+                        yearly = df_result.groupby('Year')['Equity'].agg(['first', 'last'])
+                        yearly['Return'] = (yearly['last'] - yearly['first']) / yearly['first']
+                        
+                        strategy_name = generate_display_name(r)
+                        yearly_returns[strategy_name] = yearly['Return'].to_dict()
+                        all_years.update(yearly['Return'].index.tolist())
+                    
+                    # 建立比較表格
+                    all_years = sorted(all_years)
+                    table_data = {'年度': all_years}
+                    
+                    for strategy_name, returns in yearly_returns.items():
+                        table_data[strategy_name] = [returns.get(year, None) for year in all_years]
+                    
+                    df_yearly = pd.DataFrame(table_data)
+                    df_yearly = df_yearly.set_index('年度')
+                    
+                    # 樣式函數
+                    def color_yearly_return(val):
+                        if pd.isna(val):
+                            return 'color: gray'
+                        elif val > 0:
+                            return 'color: #D32F2F; font-weight: bold'  # 紅色 (漲)
+                        elif val < 0:
+                            return 'color: #388E3C; font-weight: bold'  # 綠色 (跌)
+                        return ''
+                    
+                    # 格式化並顯示
+                    styled_yearly = df_yearly.style.format('{:.1%}', na_rep='-').map(color_yearly_return)
+                    st.dataframe(styled_yearly, use_container_width=True)
+                    
+                    # 平均年報酬
+                    st.markdown("##### 📈 平均年報酬")
+                    avg_returns = df_yearly.mean()
+                    avg_df = pd.DataFrame({'策略': avg_returns.index, '平均年報酬': avg_returns.values})
+                    avg_df = avg_df.sort_values('平均年報酬', ascending=False)
+                    avg_df['平均年報酬'] = avg_df['平均年報酬'].apply(lambda x: f"{x:.1%}")
+                    st.dataframe(avg_df, use_container_width=True, hide_index=True)
         
         # 刪除功能
         st.markdown("---")
         st.markdown("#### 🗑️ 刪除回測")
         
-        delete_options = {key: result.get('name', '未命名') for key, result in saved.items()}
+        # 生成帶編號和時間的刪除選項，方便區分
+        delete_options = {}
+        for idx, (key, result) in enumerate(saved.items(), 1):
+            name = result.get('name', '未命名')
+            saved_at = result.get('saved_at', '')
+            cagr = result.get('cagr', 0)
+            # 格式: #1 | MA13 (動態) | 30.3% CAGR | 儲存於 2025-12-13 21:27
+            delete_options[key] = f"#{idx} | {name} | {cagr:.1%} CAGR | 儲存於 {saved_at}"
+        
         delete_key = st.selectbox("選擇要刪除的回測", options=list(delete_options.keys()), format_func=lambda x: delete_options[x])
         
         col_del1, col_del2 = st.columns([1, 4])
