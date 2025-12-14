@@ -472,10 +472,33 @@ with tab2:
         
         selected_keys = []
         cols = st.columns(3)
+        
+        # 生成統一顯示名稱的函數
+        def get_display_name(result):
+            strategy_names = {
+                'always_long': '永遠做多',
+                'ma_long': '均線波段',
+                'ma_trend': '均線趨勢',
+                'etf_only': '純ETF'
+            }
+            strat = result.get('strategy', '')
+            etf = result.get('etf', 'none')
+            ma = result.get('ma_period', 13)
+            lev = result.get('leverage', 1)
+            alloc = result.get('allocation_mode', 'dynamic')
+            alloc_label = "固定" if alloc == 'fixed' else ("動態" if alloc == 'dynamic' else "純期貨")
+            
+            strat_name = strategy_names.get(strat, strat)
+            if strat == 'etf_only':
+                return f"{strat_name}+{etf}"
+            else:
+                return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
+        
         for i, (key, result) in enumerate(saved.items()):
             col_idx = i % 3
             with cols[col_idx]:
-                if st.checkbox(f"**{result.get('name', '未命名')}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
+                display_name = get_display_name(result)
+                if st.checkbox(f"**{display_name}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
                     selected_keys.append(key)
                 
                 # 策略說明小字
@@ -508,36 +531,126 @@ with tab2:
         
         # 比較表格
         if selected_keys:
+            # 生成統一的顯示名稱（不依賴舊的 name 欄位）
+            def generate_display_name(r):
+                strategy_names = {
+                    'always_long': '永遠做多',
+                    'ma_long': '均線波段',
+                    'ma_trend': '均線趨勢',
+                    'etf_only': '純ETF'
+                }
+                strat = r.get('strategy', '')
+                etf = r.get('etf', 'none')
+                ma = r.get('ma_period', 13)
+                lev = r.get('leverage', 1)
+                alloc = r.get('allocation_mode', 'dynamic')
+                alloc_label = "固定" if alloc == 'fixed' else ("動態" if alloc == 'dynamic' else "純期貨")
+                
+                strat_name = strategy_names.get(strat, strat)
+                if strat == 'etf_only':
+                    return f"{strat_name}+{etf}"
+                else:
+                    return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
+            
             st.markdown("#### 📊 比較表格")
             
             compare_data = []
             for key in selected_keys:
                 r = saved[key]
                 compare_data.append({
-                    '名稱': r.get('name', ''),
-                    '策略': r.get('strategy_name', '').split()[0] if r.get('strategy_name') else '',
+                    'key': key,
+                    '名稱': generate_display_name(r),
+                    '策略': r.get('strategy', ''),
                     'ETF': r.get('etf', ''),
                     'MA': r.get('ma_period', 0),
                     '槓桿': f"{r.get('leverage', 0)}x",
-                    '總報酬': f"{r.get('total_return', 0):.1%}",
-                    'CAGR': f"{r.get('cagr', 0):.1%}",
-                    'MDD': f"{r.get('mdd', 0):.1%}",
-                    '初始資金': f"${r.get('initial_capital', 0):,.0f}",
-                    '最終資產': f"${r.get('final_equity', 0):,.0f}",
+                    '總報酬': r.get('total_return', 0),
+                    'CAGR': r.get('cagr', 0),
+                    'MDD': r.get('mdd', 0),
+                    '初始資金': r.get('initial_capital', 0),
+                    '最終資產': r.get('final_equity', 0),
                 })
             
             df_compare = pd.DataFrame(compare_data)
-            st.dataframe(df_compare, use_container_width=True, hide_index=True)
+            # 按總報酬率降序排列
+            df_compare = df_compare.sort_values('總報酬', ascending=False).reset_index(drop=True)
+            
+            # 格式化顯示
+            df_display = df_compare.copy()
+            df_display['總報酬'] = df_display['總報酬'].apply(lambda x: f"{x:.1%}")
+            df_display['CAGR'] = df_display['CAGR'].apply(lambda x: f"{x:.1%}")
+            df_display['MDD'] = df_display['MDD'].apply(lambda x: f"{x:.1%}")
+            df_display['初始資金'] = df_display['初始資金'].apply(lambda x: f"${x:,.0f}")
+            df_display['最終資產'] = df_display['最終資產'].apply(lambda x: f"${x:,.0f}")
+            df_display = df_display.drop(columns=['key', '策略'])
+            
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            
+            # ===== 交易明細區塊 =====
+            st.markdown("---")
+            st.markdown("#### � 交易明細")
+            st.caption("重新執行回測以查看每個策略的詳細交易記錄")
+            
+            # 選擇要查看明細的策略
+            detail_options = {row['key']: row['名稱'] for _, row in df_compare.iterrows()}
+            selected_detail = st.selectbox(
+                "選擇策略查看交易明細",
+                options=list(detail_options.keys()),
+                format_func=lambda x: detail_options[x]
+            )
+            
+            if selected_detail and st.button("🔍 執行回測查看明細", type="primary"):
+                r = saved[selected_detail]
+                
+                # 重新執行回測獲取交易記錄
+                with st.spinner("正在執行回測..."):
+                    start_date = r.get('start_date', '2014-10-01')
+                    end_date = r.get('end_date', str(df_raw.index.max().date()))
+                    
+                    mask = (df_raw.index >= pd.Timestamp(start_date)) & (df_raw.index <= pd.Timestamp(end_date))
+                    df_backtest = df_raw.loc[mask].copy()
+                    
+                    etf_dividends = ETF_CONFIG.get(r.get('etf', 'none'), {}).get('dividends', {})
+                    
+                    _, trade_log, _ = run_backtest(
+                        df_data=df_backtest,
+                        strategy=r.get('strategy', 'ma_long'),
+                        etf_code=r.get('etf', 'none'),
+                        etf_dividends=etf_dividends,
+                        initial_capital=r.get('initial_capital', 1000000),
+                        leverage=r.get('leverage', 2.0),
+                        ma_period=r.get('ma_period', 13),
+                        risk_ratio=3.0,
+                        dividend_yield=0.04,
+                        allocation_mode=r.get('allocation_mode', 'dynamic'),
+                        futures_pct=r.get('futures_pct', 0.6),
+                        etf_pct=r.get('etf_pct', 0.4)
+                    )
+                
+                if trade_log:
+                    st.success(f"✅ 共 {len(trade_log)} 筆交易")
+                    
+                    # 顯示交易記錄
+                    trade_df = pd.DataFrame(trade_log)
+                    
+                    # 格式化
+                    if '日期' in trade_df.columns:
+                        trade_df['日期'] = pd.to_datetime(trade_df['日期']).dt.strftime('%Y-%m-%d')
+                    
+                    st.dataframe(trade_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("此策略無交易記錄（可能是純 ETF 持有策略）")
             
             # 比較圖表
+            st.markdown("---")
             st.markdown("#### 📈 績效比較")
             
             fig = go.Figure()
             
-            # CAGR 比較
-            names = [saved[k].get('name', '') for k in selected_keys]
-            cagrs = [saved[k].get('cagr', 0) * 100 for k in selected_keys]
-            mdds = [abs(saved[k].get('mdd', 0)) * 100 for k in selected_keys]
+            # CAGR 比較 (使用排序後的順序)
+            names = df_compare['名稱'].tolist()
+            cagrs = [v * 100 for v in df_compare['CAGR'].tolist()]
+            mdds = [abs(v) * 100 for v in df_compare['MDD'].tolist()]
             
             fig.add_trace(go.Bar(
                 name='CAGR (%)', x=names, y=cagrs,
