@@ -186,6 +186,17 @@ def run_backtest(
                 cost = abs(diff_contracts) * 50
                 cash -= cost
                 total_cost += cost
+                
+                # 記錄期貨交易
+                trade_log.append({
+                    '日期': date_str,
+                    '類型': '期貨',
+                    '動作': '做多' if diff_contracts > 0 else ('平倉' if target_contracts == 0 else '做空'),
+                    '口數變動': diff_contracts,
+                    '調整後口數': target_contracts,
+                    '指數價格': round(price_taiex, 0),
+                    '手續費': cost,
+                })
             contracts = target_contracts
             
             # ===== 執行 ETF 調整 =====
@@ -212,6 +223,18 @@ def run_backtest(
                         total_cost += cost
                         etf_shares += actual_buy
                         
+                        # 記錄 ETF 買入
+                        trade_log.append({
+                            '日期': date_str,
+                            '類型': f'ETF ({etf_code})',
+                            '動作': '買入',
+                            '股數變動': actual_buy,
+                            '調整後股數': etf_shares,
+                            'ETF價格': round(price_etf, 2),
+                            '交易金額': round(trade_value, 0),
+                            '手續費': round(cost, 0),
+                        })
+                        
                 elif diff_shares < 0:
                     # 要賣出
                     sell_shares = abs(diff_shares)
@@ -220,6 +243,18 @@ def run_backtest(
                     cash += trade_value - cost
                     total_cost += cost
                     etf_shares -= sell_shares
+                    
+                    # 記錄 ETF 賣出
+                    trade_log.append({
+                        '日期': date_str,
+                        '類型': f'ETF ({etf_code})',
+                        '動作': '賣出',
+                        '股數變動': -sell_shares,
+                        '調整後股數': etf_shares,
+                        'ETF價格': round(price_etf, 2),
+                        '交易金額': round(trade_value, 0),
+                        '手續費': round(cost, 0),
+                    })
             
             last_month = curr_month
         
