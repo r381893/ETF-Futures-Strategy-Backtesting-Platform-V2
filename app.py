@@ -633,11 +633,68 @@ with tab2:
                     # 顯示交易記錄
                     trade_df = pd.DataFrame(trade_log)
                     
-                    # 格式化
+                    # 格式化日期
                     if '日期' in trade_df.columns:
                         trade_df['日期'] = pd.to_datetime(trade_df['日期']).dt.strftime('%Y-%m-%d')
                     
-                    st.dataframe(trade_df, use_container_width=True, hide_index=True)
+                    # 計算資產變動
+                    if '調整後資產' in trade_df.columns:
+                        trade_df['資產變動'] = trade_df['調整後資產'].diff()
+                        trade_df['資產變動'] = trade_df['資產變動'].fillna(0)
+                    
+                    # 樣式函數：根據類型設定背景色
+                    def style_row_by_type(row):
+                        if '期貨' in str(row.get('類型', '')):
+                            return ['background-color: #E3F2FD'] * len(row)  # 淺藍色
+                        elif 'ETF' in str(row.get('類型', '')):
+                            return ['background-color: #E8F5E9'] * len(row)  # 淺綠色
+                        return [''] * len(row)
+                    
+                    # 樣式函數：資產變動用紅綠色
+                    def color_change(val):
+                        if pd.isna(val) or val == 0:
+                            return ''
+                        elif val > 0:
+                            return 'color: #D32F2F; font-weight: bold'  # 紅色（漲）
+                        else:
+                            return 'color: #388E3C; font-weight: bold'  # 綠色（跌）
+                    
+                    # 樣式函數：動作用顏色標示
+                    def color_action(val):
+                        if val == '做多':
+                            return 'color: #D32F2F; font-weight: bold'  # 紅色
+                        elif val == '平倉':
+                            return 'color: #1976D2; font-weight: bold'  # 藍色
+                        elif val == '做空':
+                            return 'color: #388E3C; font-weight: bold'  # 綠色
+                        elif val == '買入':
+                            return 'color: #D32F2F'  # 紅色
+                        elif val == '賣出':
+                            return 'color: #388E3C'  # 綠色
+                        return ''
+                    
+                    # 應用樣式
+                    styled_df = trade_df.style.apply(style_row_by_type, axis=1)
+                    
+                    if '資產變動' in trade_df.columns:
+                        styled_df = styled_df.map(color_change, subset=['資產變動'])
+                    
+                    if '動作' in trade_df.columns:
+                        styled_df = styled_df.map(color_action, subset=['動作'])
+                    
+                    # 格式化數字
+                    format_dict = {}
+                    if '調整後資產' in trade_df.columns:
+                        format_dict['調整後資產'] = '${:,.0f}'
+                    if '資產變動' in trade_df.columns:
+                        format_dict['資產變動'] = '{:+,.0f}'
+                    if '交易金額' in trade_df.columns:
+                        format_dict['交易金額'] = '${:,.0f}'
+                    
+                    if format_dict:
+                        styled_df = styled_df.format(format_dict)
+                    
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
                 else:
                     st.info("此策略無交易記錄（可能是純 ETF 持有策略）")
             
