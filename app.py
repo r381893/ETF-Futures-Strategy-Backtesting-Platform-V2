@@ -390,7 +390,7 @@ def load_data():
                     config['yahoo_ticker'], 
                     start=config['start_date'], 
                     progress=False,
-                    auto_adjust=True,
+                    auto_adjust=False,  # 使用原始價格，避免股利重複計算
                     timeout=30
                 )
                 if isinstance(d_etf.columns, pd.MultiIndex):
