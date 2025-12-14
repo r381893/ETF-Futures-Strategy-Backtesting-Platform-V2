@@ -312,7 +312,11 @@ with tab1:
             
             if strategy == 'etf_only':
                 auto_name = f"{strategy_names[strategy]}+{etf_names[etf_code]}"
+            elif strategy == 'always_long':
+                # 永遠做多不使用均線，不顯示 MA 參數
+                auto_name = f"{strategy_names[strategy]}+{etf_names[etf_code]} {leverage}x ({alloc_label})"
             else:
+                # ma_long 和 ma_trend 才使用均線
                 auto_name = f"{strategy_names[strategy]}+{etf_names[etf_code]} MA{ma_period} {leverage}x ({alloc_label})"
             save_name = col_save1.text_input("回測名稱", value=auto_name)
             
@@ -362,7 +366,11 @@ with tab1:
                 col1, col2, col3, col4 = st.columns(4)
                 col1.info(f"**策略**: {strategy_options[strategy]}")
                 col2.info(f"**搭配**: {etf_options[etf_code]}")
-                col3.info(f"**參數**: MA{ma_period} / {leverage}x")
+                # 只有使用均線的策略才顯示 MA
+                if strategy in ['ma_long', 'ma_trend']:
+                    col3.info(f"**參數**: MA{ma_period} / {leverage}x")
+                else:
+                    col3.info(f"**槓桿**: {leverage}x")
                 
                 # 配置模式顯示
                 if allocation_mode == 'fixed':
@@ -491,7 +499,11 @@ with tab2:
             strat_name = strategy_names.get(strat, strat)
             if strat == 'etf_only':
                 return f"{strat_name}+{etf}"
+            elif strat == 'always_long':
+                # 永遠做多不使用均線
+                return f"{strat_name}+{etf} {lev}x ({alloc_label})"
             else:
+                # ma_long 和 ma_trend 才使用均線
                 return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
         
         for i, (key, result) in enumerate(saved.items()):
@@ -558,7 +570,11 @@ with tab2:
                 strat_name = strategy_names.get(strat, strat)
                 if strat == 'etf_only':
                     return f"{strat_name}+{etf}"
+                elif strat == 'always_long':
+                    # 永遠做多不使用均線
+                    return f"{strat_name}+{etf} {lev}x ({alloc_label})"
                 else:
+                    # ma_long 和 ma_trend 才使用均線
                     return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
             
             st.markdown("#### 📊 比較表格")
