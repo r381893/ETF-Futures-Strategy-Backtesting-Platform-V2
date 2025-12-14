@@ -102,6 +102,12 @@ def run_backtest(
                 signal = 0
             else:
                 signal = 1 if price_taiex >= ma_val else 0
+        elif strategy == 'ma_short':
+            # 均線做空：價格<MA做空，>=MA平倉
+            if pd.isna(ma_val):
+                signal = 0
+            else:
+                signal = -1 if price_taiex < ma_val else 0
         elif strategy == 'ma_trend':
             if pd.isna(ma_val):
                 signal = 0

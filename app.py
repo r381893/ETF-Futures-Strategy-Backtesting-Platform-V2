@@ -245,6 +245,7 @@ st.sidebar.header("⚙️ 策略設定")
 strategy_options = {
     'always_long': '🔵 永遠做多 (持續轉倉)',
     'ma_long': '🟢 均線波段 (>MA做多, <MA平倉)',
+    'ma_short': '🔴 均線做空 (<MA做空, >MA平倉)',
     'ma_trend': '🟡 均線趨勢 (>MA做多, <MA做空)',
     'etf_only': '🟤 純 ETF 持有 (不做期貨)',
 }
@@ -479,6 +480,7 @@ with tab1:
             strategy_names = {
                 'always_long': '永遠做多',
                 'ma_long': '均線波段',
+                'ma_short': '均線做空',
                 'ma_trend': '均線趨勢',
                 'etf_only': '純ETF'
             }
@@ -666,6 +668,7 @@ with tab2:
             strategy_names = {
                 'always_long': '永遠做多',
                 'ma_long': '均線波段',
+                'ma_short': '均線做空',
                 'ma_trend': '均線趨勢',
                 'etf_only': '純ETF'
             }
@@ -697,6 +700,7 @@ with tab2:
                 strategy_desc = {
                     'always_long': '永遠持有期貨多單',
                     'ma_long': '價格>MA做多，<MA平倉',
+                    'ma_short': '價格<MA做空，>MA平倉',
                     'ma_trend': '價格>MA做多，<MA做空',
                     'etf_only': '不做期貨，純持有ETF'
                 }
@@ -737,6 +741,7 @@ with tab2:
                 strategy_names = {
                     'always_long': '永遠做多',
                     'ma_long': '均線波段',
+                    'ma_short': '均線做空',
                     'ma_trend': '均線趨勢',
                     'etf_only': '純ETF'
                 }
