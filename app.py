@@ -693,7 +693,8 @@ with tab2:
             col_idx = i % 3
             with cols[col_idx]:
                 display_name = get_display_name(result)
-                if st.checkbox(f"**{display_name}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
+                # 加上編號方便對照表格
+                if st.checkbox(f"**#{i+1} {display_name}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
                     selected_keys.append(key)
                 
                 # 策略說明小字
