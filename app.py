@@ -785,6 +785,9 @@ with tab2:
             # 按總報酬率降序排列
             df_compare = df_compare.sort_values('總報酬', ascending=False).reset_index(drop=True)
             
+            # 新增編號欄位 (從 1 開始)
+            df_compare.insert(0, '編號', range(1, len(df_compare) + 1))
+            
             # 格式化顯示
             df_display = df_compare.copy()
             df_display['總報酬'] = df_display['總報酬'].apply(lambda x: f"{x:.1%}")
