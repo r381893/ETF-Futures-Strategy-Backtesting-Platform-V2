@@ -25,6 +25,181 @@ st.set_page_config(
 )
 
 # =============================================================================
+# 自訂 CSS 樣式
+# =============================================================================
+st.markdown("""
+<style>
+/* 整體字體和背景 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+/* 主區域背景 */
+.main .block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1200px;
+}
+
+/* 側邊欄樣式 */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    border-right: 1px solid #dee2e6;
+}
+
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 1.5rem;
+}
+
+/* 卡片樣式 */
+div[data-testid="stMetric"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 1rem;
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+div[data-testid="stMetric"] label {
+    color: rgba(255,255,255,0.9) !important;
+}
+
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    color: white !important;
+    font-weight: 700;
+}
+
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
+    color: rgba(255,255,255,0.85) !important;
+}
+
+/* Tab 標籤樣式 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: #f8f9fa;
+    padding: 8px;
+    border-radius: 12px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px;
+    padding: 10px 20px;
+    background-color: transparent;
+    font-weight: 500;
+    color: #495057;
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: white !important;
+    color: #1a73e8 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    font-weight: 600;
+}
+
+/* 按鈕樣式 */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0, 184, 148, 0.3);
+    transition: all 0.3s ease;
+}
+
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
+}
+
+.stButton > button {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+/* 輸入框樣式 */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stSelectbox > div > div {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+/* 滑桿樣式 */
+.stSlider > div > div > div {
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+/* info 區塊樣式 */
+.stAlert {
+    border-radius: 10px;
+    border-left-width: 4px;
+}
+
+/* 分隔線 */
+hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #dee2e6, transparent);
+    margin: 1.5rem 0;
+}
+
+/* DataFrame 樣式 */
+.stDataFrame {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+/* Plotly 圖表容器 */
+.stPlotlyChart {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+}
+
+/* 標題樣式 */
+h1, h2, h3 {
+    color: #2c3e50;
+}
+
+/* Hero 區塊 */
+.hero-section {
+    text-align: center;
+    padding: 2rem 0 1.5rem 0;
+    margin-bottom: 1rem;
+}
+
+.hero-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.hero-subtitle {
+    font-size: 1.1rem;
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
+/* Checkbox 樣式 */
+.stCheckbox > label {
+    font-weight: 500;
+}
+
+/* Expander 樣式 */
+.streamlit-expanderHeader {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =============================================================================
 # 儲存檔案路徑
 # =============================================================================
 SAVED_RESULTS_FILE = "saved_backtests.json"
@@ -49,9 +224,14 @@ if 'saved_results' not in st.session_state:
     st.session_state.saved_results = load_saved_results()
 
 # =============================================================================
-# 主標題
+# Hero 區塊 - 主標題
 # =============================================================================
-st.title("📈 期貨策略回測平台 V2")
+st.markdown("""
+<div class="hero-section">
+    <div class="hero-title">📈 期貨策略回測平台</div>
+    <div class="hero-subtitle">透過歷史數據驗證您的交易策略，做出更明智的投資決策</div>
+</div>
+""", unsafe_allow_html=True)
 
 # 頁面切換
 tab1, tab2, tab3 = st.tabs(["🔬 回測分析", "📊 比較已儲存", "📖 策略說明"])
