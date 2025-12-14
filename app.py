@@ -295,9 +295,25 @@ with tab1:
             st.markdown("### 💾 儲存此回測")
             col_save1, col_save2 = st.columns([3, 1])
             
-            # 自動產生名稱
+            # 自動產生名稱 (更具描述性)
+            strategy_names = {
+                'always_long': '永遠做多',
+                'ma_long': '均線波段',
+                'ma_trend': '均線趨勢',
+                'etf_only': '純ETF'
+            }
+            etf_names = {
+                'none': '純現金',
+                '00631L': '00631L',
+                '0056': '0056',
+                '00878': '00878'
+            }
             alloc_label = "固定" if allocation_mode == 'fixed' else ("動態" if allocation_mode == 'dynamic' else "純期貨")
-            auto_name = f"{strategy_options[strategy].split()[0]} + {etf_options[etf_code].split()[0]} MA{ma_period} ({alloc_label})"
+            
+            if strategy == 'etf_only':
+                auto_name = f"{strategy_names[strategy]}+{etf_names[etf_code]}"
+            else:
+                auto_name = f"{strategy_names[strategy]}+{etf_names[etf_code]} MA{ma_period} {leverage}x ({alloc_label})"
             save_name = col_save1.text_input("回測名稱", value=auto_name)
             
             if col_save2.button("💾 儲存", type="primary"):
