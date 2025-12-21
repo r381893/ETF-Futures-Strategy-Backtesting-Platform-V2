@@ -3,6 +3,7 @@
 期貨策略回測平台 V2
 簡潔、模組化、可自由組合策略
 支援儲存、比較、刪除回測結果
+支援 Firebase 雲端儲存
 """
 import streamlit as st
 import pandas as pd
@@ -15,6 +16,15 @@ from datetime import datetime
 from config import ETF_CONFIG, FUTURES_CONFIG
 from strategies import run_backtest
 
+# Firebase 相關匯入
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+
+
 # =============================================================================
 # 頁面設定
 # =============================================================================
@@ -25,187 +35,661 @@ st.set_page_config(
 )
 
 # =============================================================================
-# 自訂 CSS 樣式
+# 自訂 CSS 樣式 - 現代化設計系統
 # =============================================================================
 st.markdown("""
 <style>
-/* 整體字體和背景 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+/* ============================================
+   CSS 變數 - 設計系統顏色
+   ============================================ */
+:root {
+    --primary: #0891b2;
+    --primary-light: #22d3ee;
+    --primary-dark: #0e7490;
+    --secondary: #f59e0b;
+    --secondary-light: #fbbf24;
+    --accent: #f59e0b;
+    --background: #ffffff;
+    --foreground: #374151;
+    --card: #f9fafb;
+    --card-hover: #f3f4f6;
+    --border: #e5e7eb;
+    --muted: #9ca3af;
+    --success: #10b981;
+    --danger: #ef4444;
+    --gradient-primary: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+    --gradient-accent: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --gradient-purple: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --radius: 0.75rem;
+}
+
+/* ============================================
+   整體字體和背景
+   ============================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Noto Sans TC', sans-serif;
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* 主區域背景 */
+/* 主區域背景 - 漸層效果 */
+.stApp {
+    background: linear-gradient(135deg, #ffffff 0%, rgba(8, 145, 178, 0.03) 50%, rgba(245, 158, 11, 0.03) 100%);
+}
+
 .main .block-container {
-    padding-top: 2rem;
+    padding-top: 1rem;
     padding-bottom: 2rem;
-    max-width: 1200px;
+    max-width: 1400px;
 }
 
-/* 側邊欄樣式 */
+/* ============================================
+   側邊欄樣式 - 現代化設計
+   ============================================ */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
-    border-right: 1px solid #dee2e6;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-right: 1px solid var(--border);
+}
+
+section[data-testid="stSidebar"] > div:first-child {
+    background: transparent;
 }
 
 section[data-testid="stSidebar"] .block-container {
     padding-top: 1.5rem;
+    padding-bottom: 2rem;
 }
 
-/* 卡片樣式 */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {
+    color: var(--primary-dark);
+    font-weight: 600;
+}
+
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stSlider label,
+section[data-testid="stSidebar"] .stNumberInput label {
+    color: var(--foreground);
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+/* 側邊欄分隔線 */
+section[data-testid="stSidebar"] hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 1.25rem 0;
+}
+
+/* ============================================
+   Metric 卡片樣式 - 漸層背景
+   ============================================ */
 div[data-testid="stMetric"] {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 12px;
-    padding: 1rem;
+    background: var(--gradient-primary);
+    border-radius: var(--radius);
+    padding: 1.25rem;
     color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: var(--shadow-lg);
+    border: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+div[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+}
+
+div[data-testid="stMetric"]:nth-child(2) {
+    background: var(--gradient-accent);
+}
+
+div[data-testid="stMetric"]:nth-child(3) {
+    background: var(--gradient-purple);
+}
+
+div[data-testid="stMetric"]:nth-child(4) {
+    background: var(--gradient-success);
 }
 
 div[data-testid="stMetric"] label {
     color: rgba(255,255,255,0.9) !important;
+    font-weight: 500;
+    font-size: 0.875rem;
 }
 
 div[data-testid="stMetric"] [data-testid="stMetricValue"] {
     color: white !important;
     font-weight: 700;
+    font-size: 1.75rem;
 }
 
 div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
-    color: rgba(255,255,255,0.85) !important;
+    color: rgba(255,255,255,0.9) !important;
 }
 
-/* Tab 標籤樣式 */
+/* ============================================
+   Tab 標籤樣式 - 現代化導航
+   ============================================ */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    background-color: #f8f9fa;
-    padding: 8px;
-    border-radius: 12px;
+    gap: 0.5rem;
+    background-color: var(--card);
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
 .stTabs [data-baseweb="tab"] {
-    border-radius: 8px;
-    padding: 10px 20px;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1.5rem;
     background-color: transparent;
     font-weight: 500;
-    color: #495057;
+    color: var(--muted);
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: var(--foreground);
+    background-color: rgba(8, 145, 178, 0.05);
 }
 
 .stTabs [aria-selected="true"] {
     background-color: white !important;
-    color: #1a73e8 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    color: var(--primary) !important;
+    box-shadow: var(--shadow-md);
     font-weight: 600;
+    border: 1px solid var(--border);
 }
 
-/* 按鈕樣式 */
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.5rem;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(0, 184, 148, 0.3);
-    transition: all 0.3s ease;
-}
-
-.stButton > button[kind="primary"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
-}
-
+/* ============================================
+   按鈕樣式 - 現代化設計
+   ============================================ */
 .stButton > button {
-    border-radius: 8px;
-    font-weight: 500;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
     transition: all 0.2s ease;
+    border: 1px solid transparent;
 }
 
-/* 輸入框樣式 */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {
+    background: var(--gradient-primary);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 14px 0 rgba(8, 145, 178, 0.39);
+}
+
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="baseButton-primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(8, 145, 178, 0.5);
+}
+
+.stButton > button[kind="secondary"],
+.stButton > button[data-testid="baseButton-secondary"] {
+    background: var(--gradient-accent);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 14px 0 rgba(245, 158, 11, 0.3);
+}
+
+.stButton > button[kind="secondary"]:hover,
+.stButton > button[data-testid="baseButton-secondary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+}
+
+/* 次要按鈕 */
+.stButton > button:not([kind="primary"]):not([kind="secondary"]) {
+    background-color: white;
+    border: 1px solid var(--border);
+    color: var(--foreground);
+}
+
+.stButton > button:not([kind="primary"]):not([kind="secondary"]):hover {
+    background-color: var(--card);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* ============================================
+   輸入框樣式
+   ============================================ */
 .stTextInput > div > div > input,
-.stNumberInput > div > div > input,
+.stNumberInput > div > div > input {
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    background-color: white;
+}
+
+.stTextInput > div > div > input:focus,
+.stNumberInput > div > div > input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+}
+
 .stSelectbox > div > div {
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
 }
 
-/* 滑桿樣式 */
-.stSlider > div > div > div {
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+.stSelectbox > div > div:hover {
+    border-color: var(--primary-light);
 }
 
-/* info 區塊樣式 */
+/* ============================================
+   滑桿樣式
+   ============================================ */
+.stSlider > div > div > div[data-baseweb="slider"] > div {
+    background: var(--gradient-primary) !important;
+}
+
+.stSlider > div > div > div[data-baseweb="slider"] > div > div {
+    background-color: var(--primary) !important;
+    box-shadow: 0 2px 6px rgba(8, 145, 178, 0.4);
+}
+
+/* ============================================
+   Alert/Info 區塊樣式
+   ============================================ */
 .stAlert {
-    border-radius: 10px;
+    border-radius: var(--radius);
     border-left-width: 4px;
+    box-shadow: var(--shadow-sm);
 }
 
-/* 分隔線 */
+div[data-testid="stAlert"] {
+    background-color: rgba(8, 145, 178, 0.05);
+    border-left-color: var(--primary);
+}
+
+/* ============================================
+   分隔線
+   ============================================ */
 hr {
     border: none;
     height: 1px;
-    background: linear-gradient(90deg, transparent, #dee2e6, transparent);
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
     margin: 1.5rem 0;
 }
 
-/* DataFrame 樣式 */
+/* ============================================
+   DataFrame 樣式
+   ============================================ */
 .stDataFrame {
-    border-radius: 10px;
+    border-radius: var(--radius);
     overflow: hidden;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
 }
 
-/* Plotly 圖表容器 */
+.stDataFrame [data-testid="stDataFrameResizable"] {
+    border-radius: var(--radius);
+}
+
+/* ============================================
+   Plotly 圖表容器
+   ============================================ */
 .stPlotlyChart {
-    border-radius: 12px;
+    border-radius: var(--radius);
     overflow: hidden;
-    box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border);
+    background: white;
+    padding: 0.5rem;
 }
 
-/* 標題樣式 */
+/* ============================================
+   標題樣式
+   ============================================ */
 h1, h2, h3 {
-    color: #2c3e50;
+    color: var(--foreground);
+    font-weight: 700;
 }
 
-/* Hero 區塊 */
+h1 {
+    font-size: 2rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ============================================
+   Hero 區塊 - 現代化設計
+   ============================================ */
 .hero-section {
     text-align: center;
-    padding: 2rem 0 1.5rem 0;
-    margin-bottom: 1rem;
+    padding: 2.5rem 1rem;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, rgba(8, 145, 178, 0.05) 0%, rgba(245, 158, 11, 0.05) 100%);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
 }
 
 .hero-title {
     font-size: 2.5rem;
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 0.5rem;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.025em;
 }
 
 .hero-subtitle {
-    font-size: 1.1rem;
-    color: #6c757d;
-    margin-bottom: 1.5rem;
+    font-size: 1.125rem;
+    color: var(--muted);
+    margin-bottom: 0;
+    font-weight: 400;
 }
 
-/* Checkbox 樣式 */
+/* ============================================
+   卡片樣式
+   ============================================ */
+.card {
+    background-color: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.card-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--foreground);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.card-icon {
+    color: var(--primary);
+}
+
+/* ============================================
+   Checkbox 樣式
+   ============================================ */
 .stCheckbox > label {
     font-weight: 500;
+    color: var(--foreground);
 }
 
-/* Expander 樣式 */
+.stCheckbox > label > span[data-baseweb="checkbox"] {
+    border-color: var(--border);
+}
+
+.stCheckbox > label > span[data-baseweb="checkbox"]:hover {
+    border-color: var(--primary);
+}
+
+/* ============================================
+   Expander 樣式
+   ============================================ */
 .streamlit-expanderHeader {
-    background-color: #f8f9fa;
-    border-radius: 8px;
+    background-color: var(--card);
+    border-radius: 0.5rem;
+    font-weight: 500;
+    color: var(--foreground);
+    transition: all 0.2s ease;
+}
+
+.streamlit-expanderHeader:hover {
+    background-color: var(--card-hover);
+    color: var(--primary);
+}
+
+details[data-testid="stExpander"] {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+details[data-testid="stExpander"] summary {
+    padding: 1rem;
+}
+
+/* ============================================
+   進度條樣式
+   ============================================ */
+.stProgress > div > div > div > div {
+    background: var(--gradient-primary);
+}
+
+/* ============================================
+   Spinner 樣式
+   ============================================ */
+.stSpinner > div {
+    border-top-color: var(--primary) !important;
+}
+
+/* ============================================
+   成功/警告/錯誤訊息
+   ============================================ */
+.stSuccess {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-left-color: var(--success);
+}
+
+.stWarning {
+    background-color: rgba(245, 158, 11, 0.1);
+    border-left-color: var(--secondary);
+}
+
+.stError {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-left-color: var(--danger);
+}
+
+/* ============================================
+   Markdown 內容樣式
+   ============================================ */
+.stMarkdown {
+    line-height: 1.7;
+}
+
+.stMarkdown h3 {
+    color: var(--foreground);
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stMarkdown code {
+    background-color: var(--card);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    color: var(--primary-dark);
+}
+
+/* ============================================
+   表格樣式增強
+   ============================================ */
+.stMarkdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+}
+
+.stMarkdown table th {
+    background-color: var(--card);
+    color: var(--foreground);
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+}
+
+.stMarkdown table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.stMarkdown table tr:hover td {
+    background-color: rgba(8, 145, 178, 0.03);
+}
+
+/* ============================================
+   日期選擇器樣式
+   ============================================ */
+.stDateInput > div > div > input {
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+}
+
+.stDateInput > div > div > input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+}
+
+/* ============================================
+   響應式調整
+   ============================================ */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 1.75rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1rem;
+    }
+    
+    div[data-testid="stMetric"] {
+        padding: 1rem;
+    }
+    
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+    }
+}
+
+/* ============================================
+   動畫效果
+   ============================================ */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.stTabs [data-baseweb="tab-panel"] {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ============================================
+   滾動條樣式
+   ============================================ */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--card);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--muted);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--foreground);
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 儲存檔案路徑
+# Firebase 初始化與儲存功能
 # =============================================================================
-SAVED_RESULTS_FILE = "saved_backtests.json"
+SAVED_RESULTS_FILE = "saved_backtests.json"  # 本地備份檔案
+FIREBASE_DB_URL = "https://backtesting-system-pro-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+def init_firebase():
+    """初始化 Firebase 連線"""
+    if not FIREBASE_AVAILABLE:
+        return False
+    
+    # 檢查是否已經初始化
+    if firebase_admin._apps:
+        return True
+    
+    try:
+        # 優先嘗試本地開發使用 firebase_key.json
+        if os.path.exists('firebase_key.json'):
+            cred = credentials.Certificate('firebase_key.json')
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': FIREBASE_DB_URL
+            })
+            return True
+        
+        # 嘗試使用 Streamlit secrets (雲端部署)
+        try:
+            if hasattr(st, 'secrets') and 'firebase' in st.secrets:
+                cred_dict = dict(st.secrets["firebase"])
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred, {
+                    'databaseURL': FIREBASE_DB_URL
+                })
+                return True
+        except Exception:
+            pass  # secrets 不存在，繼續嘗試其他方式
+        
+        return False
+    except Exception as e:
+        st.warning(f"⚠️ Firebase 初始化失敗: {e}")
+        return False
 
 def load_saved_results():
-    """載入已儲存的回測結果"""
+    """載入已儲存的回測結果 (優先從 Firebase 載入)"""
+    # 嘗試從 Firebase 載入
+    if init_firebase():
+        try:
+            ref = db.reference('backtest_results')
+            data = ref.get()
+            if data:
+                return data
+        except Exception as e:
+            st.warning(f"⚠️ Firebase 讀取失敗: {e}，使用本地檔案")
+    
+    # 回退到本地檔案
     if os.path.exists(SAVED_RESULTS_FILE):
         try:
             with open(SAVED_RESULTS_FILE, 'r', encoding='utf-8') as f:
@@ -215,13 +699,40 @@ def load_saved_results():
     return {}
 
 def save_results_to_file(results):
-    """儲存回測結果到檔案"""
-    with open(SAVED_RESULTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+    """儲存回測結果 (同時儲存到 Firebase 和本地)"""
+    # 儲存到本地作為備份
+    try:
+        with open(SAVED_RESULTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.warning(f"⚠️ 本地儲存失敗: {e}")
+    
+    # 儲存到 Firebase
+    if init_firebase():
+        try:
+            ref = db.reference('backtest_results')
+            ref.set(results)
+        except Exception as e:
+            st.warning(f"⚠️ Firebase 儲存失敗: {e}")
+
+def delete_from_firebase(key):
+    """從 Firebase 刪除指定的回測結果"""
+    if init_firebase():
+        try:
+            ref = db.reference(f'backtest_results/{key}')
+            ref.delete()
+        except Exception as e:
+            st.warning(f"⚠️ Firebase 刪除失敗: {e}")
 
 # 初始化 session state
 if 'saved_results' not in st.session_state:
     st.session_state.saved_results = load_saved_results()
+
+# 顯示 Firebase 連線狀態
+if FIREBASE_AVAILABLE and init_firebase():
+    st.sidebar.success("☁️ Firebase 已連線")
+else:
+    st.sidebar.info("💾 使用本地儲存")
 
 # =============================================================================
 # Hero 區塊 - 主標題
@@ -672,8 +1183,15 @@ with tab2:
                 'ma_trend': '均線趨勢',
                 'etf_only': '純ETF'
             }
+            etf_names = {
+                'none': '純現金',
+                '00631L': '00631L',
+                '0056': '0056',
+                '00878': '00878'
+            }
             strat = result.get('strategy', '')
             etf = result.get('etf', 'none')
+            etf_display = etf_names.get(etf, etf)  # 轉換成中文顯示
             ma = result.get('ma_period', 13)
             lev = result.get('leverage', 1)
             alloc = result.get('allocation_mode', 'dynamic')
@@ -681,23 +1199,22 @@ with tab2:
             
             strat_name = strategy_names.get(strat, strat)
             if strat == 'etf_only':
-                return f"{strat_name}+{etf}"
+                return f"{strat_name}+{etf_display}"
             elif strat == 'always_long':
                 # 永遠做多不使用均線
-                return f"{strat_name}+{etf} {lev}x ({alloc_label})"
+                return f"{strat_name}+{etf_display} {lev}x ({alloc_label})"
             else:
                 # ma_long 和 ma_trend 才使用均線
-                return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
+                return f"{strat_name}+{etf_display} MA{ma} {lev}x ({alloc_label})"
         
         for i, (key, result) in enumerate(saved.items()):
             col_idx = i % 3
             with cols[col_idx]:
                 display_name = get_display_name(result)
-                # 加上編號方便對照表格
-                if st.checkbox(f"**#{i+1} {display_name}**\n\n{result.get('cagr', 0):.1%} CAGR | {result.get('mdd', 0):.1%} MDD", key=f"check_{key}"):
-                    selected_keys.append(key)
+                cagr = result.get('cagr', 0)
+                mdd = result.get('mdd', 0)
                 
-                # 策略說明小字
+                # 策略說明
                 strategy_desc = {
                     'always_long': '永遠持有期貨多單',
                     'ma_long': '價格>MA做多，<MA平倉',
@@ -722,16 +1239,74 @@ with tab2:
                 if strat != 'etf_only' and alloc in alloc_desc:
                     desc_parts.append(alloc_desc[alloc])
                 
-                # 加入回測區間
+                # 日期區間
                 start_d = result.get('start_date', '')
                 end_d = result.get('end_date', '')
+                date_range_str = ""
                 if start_d and end_d:
-                    # 簡化日期顯示
-                    start_short = start_d[:7] if len(start_d) >= 7 else start_d  # 2014-10
+                    start_short = start_d[:7] if len(start_d) >= 7 else start_d
                     end_short = end_d[:7] if len(end_d) >= 7 else end_d
-                    desc_parts.append(f"📅 {start_short} ~ {end_short}")
+                    date_range_str = f"{start_short} ~ {end_short}"
                 
-                st.caption(" | ".join(desc_parts) if desc_parts else "")
+                # 決定卡片顏色 (根據 CAGR 正負)
+                if cagr > 0.15:
+                    border_color = "#10b981"  # 綠色 - 高報酬
+                    bg_color = "rgba(16, 185, 129, 0.05)"
+                elif cagr > 0:
+                    border_color = "#0891b2"  # 青色 - 正報酬
+                    bg_color = "rgba(8, 145, 178, 0.05)"
+                else:
+                    border_color = "#ef4444"  # 紅色 - 負報酬
+                    bg_color = "rgba(239, 68, 68, 0.05)"
+                
+                # 渲染卡片
+                st.markdown(f"""
+                <div style="
+                    background: {bg_color};
+                    border: 2px solid {border_color};
+                    border-radius: 12px;
+                    padding: 16px;
+                    margin-bottom: 12px;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                ">
+                    <div style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">
+                        #{i+1} {display_name}
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-bottom: 8px;">
+                        <div style="
+                            background: linear-gradient(135deg, #0891b2, #06b6d4);
+                            color: white;
+                            padding: 4px 10px;
+                            border-radius: 6px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        ">
+                            CAGR {cagr:.1%}
+                        </div>
+                        <div style="
+                            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+                            color: white;
+                            padding: 4px 10px;
+                            border-radius: 6px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        ">
+                            MDD {mdd:.1%}
+                        </div>
+                    </div>
+                    <div style="font-size: 11px; color: #6b7280; line-height: 1.5;">
+                        {' | '.join(desc_parts)}
+                    </div>
+                    <div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">
+                        📅 {date_range_str}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 加上 checkbox 讓使用者選擇
+                if st.checkbox(f"選擇此策略", key=f"check_{key}", label_visibility="visible"):
+                    selected_keys.append(key)
         
         st.markdown("---")
         
@@ -746,8 +1321,15 @@ with tab2:
                     'ma_trend': '均線趨勢',
                     'etf_only': '純ETF'
                 }
+                etf_names = {
+                    'none': '純現金',
+                    '00631L': '00631L',
+                    '0056': '0056',
+                    '00878': '00878'
+                }
                 strat = r.get('strategy', '')
                 etf = r.get('etf', 'none')
+                etf_display = etf_names.get(etf, etf)  # 轉換成中文顯示
                 ma = r.get('ma_period', 13)
                 lev = r.get('leverage', 1)
                 alloc = r.get('allocation_mode', 'dynamic')
@@ -755,24 +1337,32 @@ with tab2:
                 
                 strat_name = strategy_names.get(strat, strat)
                 if strat == 'etf_only':
-                    return f"{strat_name}+{etf}"
+                    return f"{strat_name}+{etf_display}"
                 elif strat == 'always_long':
                     # 永遠做多不使用均線
-                    return f"{strat_name}+{etf} {lev}x ({alloc_label})"
+                    return f"{strat_name}+{etf_display} {lev}x ({alloc_label})"
                 else:
                     # ma_long 和 ma_trend 才使用均線
-                    return f"{strat_name}+{etf} MA{ma} {lev}x ({alloc_label})"
+                    return f"{strat_name}+{etf_display} MA{ma} {lev}x ({alloc_label})"
             
             st.markdown("#### 📊 比較表格")
             
             compare_data = []
+            # ETF 中文名稱對照
+            etf_display_names = {
+                'none': '純現金',
+                '00631L': '00631L (元大台灣50正2)',
+                '0056': '0056 (元大高股息)',
+                '00878': '00878 (國泰永續高股息)'
+            }
             for key in selected_keys:
                 r = saved[key]
+                etf_code = r.get('etf', 'none')
+                etf_display = etf_display_names.get(etf_code, etf_code)
                 compare_data.append({
                     'key': key,
                     '名稱': generate_display_name(r),
-                    '策略': r.get('strategy', ''),
-                    'ETF': r.get('etf', ''),
+                    'ETF': etf_display,
                     'MA': r.get('ma_period', 0),
                     '槓桿': f"{r.get('leverage', 0)}x",
                     '總報酬': r.get('total_return', 0),
@@ -796,7 +1386,7 @@ with tab2:
             df_display['MDD'] = df_display['MDD'].apply(lambda x: f"{x:.1%}")
             df_display['初始資金'] = df_display['初始資金'].apply(lambda x: f"${x:,.0f}")
             df_display['最終資產'] = df_display['最終資產'].apply(lambda x: f"${x:,.0f}")
-            df_display = df_display.drop(columns=['key', '策略'])
+            df_display = df_display.drop(columns=['key'])
             
             st.dataframe(df_display, use_container_width=True, hide_index=True)
             
@@ -921,7 +1511,8 @@ with tab2:
             # CAGR 比較 (使用排序後的順序)
             names = df_compare['名稱'].tolist()
             cagrs = [v * 100 for v in df_compare['CAGR'].tolist()]
-            mdds = [abs(v) * 100 for v in df_compare['MDD'].tolist()]
+            # MDD 保持負數顯示，更直觀表示下跌
+            mdds = [v * 100 for v in df_compare['MDD'].tolist()]
             
             fig.add_trace(go.Bar(
                 name='CAGR (%)', x=names, y=cagrs,
@@ -929,7 +1520,7 @@ with tab2:
             ))
             fig.add_trace(go.Bar(
                 name='MDD (%)', x=names, y=mdds,
-                marker_color='#f44336', text=[f"{v:.1f}%" for v in mdds], textposition='outside'
+                marker_color='#ef4444', text=[f"{v:.1f}%" for v in mdds], textposition='outside'
             ))
             
             fig.update_layout(
